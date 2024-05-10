@@ -2,3 +2,6 @@
 passwords.txt
 .DS_Store
 passgen
+WORDLIST.txt
+USERLIST.txt
+passgen.dYSM/
