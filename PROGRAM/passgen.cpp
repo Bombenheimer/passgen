@@ -38,6 +38,7 @@
 #include <cstring>
 #include <ciso646>
 #include <getopt.h>
+#include <cstdlib>
 
 // INCLUDING NAMESPACES
 using namespace std;
@@ -89,7 +90,7 @@ using namespace std;
 void PrintUsage(unsigned short int errorNum = 0);
 int GetSystemUsers(unsigned short int numUsers = 1, string* userList = nullptr, bool findUsers = false);
 void GenPasswordChars(unsigned short int numUsers = 1, unsigned short int passwordLength = 12, string* passwordList = nullptr, bool hasNumbers = true, bool hasLowers = true, bool hasUppers = true, bool hasSpecChars = true, bool useWords = false, bool findWords = false);
-void GenPasswordWords(unsigned short int numUsers = 1, string* userList = nullptr, string* passwordList = nullptr, string* wordList = nullptr, bool useWords = true, bool findWords = false);
+void GenPasswordWords(unsigned short int numUsers = 1, string* passwordList = nullptr, string* wordList = nullptr, bool useWords = true, bool findWords = false);
 void WriteToFIle(unsigned short int numUsers = 1, string* userList = nullptr, string* passwordList = nullptr, string filename = _DEFAULT_FILENAME, string defaultPath = _DEFAULT_PATH, bool partitionFile = false);
 void ChangeUserPasswds(unsigned short int numUsers = 1, string* userList = nullptr, string* passwordList = nullptr, bool changePasswd = false);
 
@@ -167,7 +168,7 @@ int main(int argc, char* argv[])
 	     hasUppers = _DEFAULT_INCLUDE, // TRUE
 	     hasSpecChars = _DEFAULT_INCLUDE; // TRUE
 	
-	bool partitionFile,
+	bool partitionFile = _DEFAULT_EXCLUDE,
 	     useWords = _DEFAULT_EXCLUDE, // FALSE
 	     findWords = _DEFAULT_EXCLUDE, // FALSE
 	     findUsers = _DEFAULT_EXCLUDE, // FALSE
@@ -215,17 +216,20 @@ int main(int argc, char* argv[])
 
 		// CHECK THE COMMAND LINE ARGUMENTS AND CHANGE THE VARIABLES ACCRODINGLY. IF NONE ARE GIVEN, DEFAULT VALUES WILL BE USED
 		int opt, option_index = 0;
-		while ((opt = getopt_long(argc, argv, "n:l:o:p:WNLUSCPh", long_options, &option_index)) != -1)
+		while ((opt = getopt_long(argc, argv, "n:l:o:d:WNLUSCPh", long_options, &option_index)) != -1)
 		{
 			// PARSE LONG OPTIONS THAT REQUIRE AN ARGUMENT AND DON'T HAVE A SHORT FORM EQUIVILENT
 			if ((opt == 0) and (optarg != nullptr))
 			{
 				if (strcmp(long_options[option_index].name, "userlist") == 0)
 				{
-					// GET FILE PATH, RESET NUM USERS TO 0, AND SET FIND USERS BOOLEAN TO TRUE
+					// GET FILE PATH, RESET NUM USERS TO 0, SET FIND USERS BOOLEAN TO TRUE, AND SET THE HOME DIRECTORY STRING.
+          // THEN, CHECK IF THE USER HAS ADDED A TILDA IN THE FILE PATH. IF SO, EXPAND IT TO THE HOME DIRECTORY OF THE USER
 					userListPath = optarg;
 					numUsers = 0;
 					findUsers = true;
+          string homeDir = getenv("HOME");
+          if (userListPath[0] == '~'){userListPath = homeDir + userListPath.substr(1);}
 					
 					// OPEN USER LIST FILE FOR READING
 					ifstream readfile(userListPath);
@@ -252,11 +256,12 @@ int main(int argc, char* argv[])
 				}
 				else if (strcmp(long_options[option_index].name, "wordlist") == 0)
 				{
-          // SET FIND WORDS TO TRUE
-          findWords = true;
-
-					// GET FILE PATH
+          // SET FIND WORDS TO TRUE, SET THE HOME DIRECTORY STRING, AND GET FILE PATH. THEN,
+          // CHECK IF THE USER HAS ADDED A TILDA IN THE FILE PATH. IF SO, EXPAND IT TO THE HOME DIRECTORY OF THE USER
 					wordListPath = optarg;
+          findWords = true;
+          string homeDir = getenv("HOME");
+          if (wordListPath[0] == '~'){wordListPath = homeDir + wordListPath.substr(1);}
 
 					// OPEN WORDLIST FILE FOR READING
 					ifstream readfile(wordListPath);
@@ -310,7 +315,7 @@ int main(int argc, char* argv[])
 						fileName = optarg;
 						cout << fileName << endl;
 						break;
-					case 'p':
+					case 'd':
 						defaultPath = optarg;
 						cout << defaultPath << endl;
 						break;
@@ -403,14 +408,20 @@ int main(int argc, char* argv[])
 		// EXECUTE PROGRAM
 		GetSystemUsers(numUsers, userList.data(), findUsers);
 		GenPasswordChars(numUsers, passwordLength, passwordList.data(), hasNumbers, hasLowers, hasUppers, hasSpecChars, useWords, findWords);
-		GenPasswordWords(numUsers, userList.data(), passwordList.data(), wordList.data(), useWords, findWords);
+		GenPasswordWords(numUsers, passwordList.data(), wordList.data(), useWords, findWords);
+    for (unsigned short int i = 0; i < numUsers; i++)
+    {
+      cout << userList[i] << endl;
+    }
 		WriteToFIle(numUsers, userList.data(), passwordList.data(), fileName, defaultPath, partitionFile);
+    for (unsigned short int i = 0; i < numUsers; i++)
+    {
+      cout << userList[i] << endl;
+    }
 		ChangeUserPasswds(numUsers, userList.data(), passwordList.data(), changePasswd);
 
 	} // END OF ROOT USER CHECK
-
 	return 0;
-	
 } // END OF MAIN
 
 /*
@@ -449,7 +460,7 @@ void PrintUsage(unsigned short int errorNum)
 				                        "	-n NUM_USERS		Specify number of users to generate passwords for. (default: 1, max: 100)\n"
 				                        "	-l PASSWORD_LENGTH	Specify password length for user(s). (default: 12, min: 8, max: 50)\n"
 				                        "	-o FILENAME		Specify output filename. (default: passwords.txt)\n"
-				                        "	-p FILE_PATH		Specify path to place file(s). (default: root user home directory)\n"
+				                        "	-d DIR_PATH		Specify directory to place file(s). (default: root user home directory)\n"
 				                        "	-h, --help		Show this help message.\n"
 				                        "	-N, --exclude-nums	Exclude numbers from password(s).\n"
 				                        "	-L, --exclude-lower	Exclude lowercase letters from password(s).\n"
@@ -462,7 +473,7 @@ void PrintUsage(unsigned short int errorNum)
 				                        "	--userlist FILE_PATH	Specify userlist file for passwords.\n";
 	// SHORT HELP MESSAGE
 	const string shortUsageMsg = "usage: passgen [-WNLUSCPh] [-n NUM_USERS] [-l PASSWORD_LENGTH] [-o FILENAME]\n"
-		                           "               [-p FILE_PATH] [--exclude-nums] [--exclude-lower] [--exclude-upper]\n"
+		                           "               [-d DIR_PATH] [--exclude-nums] [--exclude-lower] [--exclude-upper]\n"
 				                       "               [--exclude-chars] [--wordlist FILE_PATH] [--userlist FILE_PATH]\n"
 				                       "               [--change-passwd] [--use-words]\n";
 
@@ -477,7 +488,6 @@ void PrintUsage(unsigned short int errorNum)
 	{
 		cerr << shortUsageMsg;
 	}
-
 } // END OF PRINT USAGE FUNCTION
 
 /*
@@ -513,6 +523,7 @@ int GetSystemUsers(unsigned short int numUsers, string* userList, bool findUsers
 	{
 		if (findUsers == true)
 		{
+      cout << "Using userlist file..." << endl;
 			return 0;
 		}
 		else
@@ -522,6 +533,13 @@ int GetSystemUsers(unsigned short int numUsers, string* userList, bool findUsers
 				const string usernamePrompt = "Enter the username of user ";
 				cout << usernamePrompt << i + 1 << ": ";
 				while ((getline(cin, userList[i]) and userList[i].length() < 32) and not(userList[i].empty())) {break;}
+
+        //DEBUG
+        if (userList[i].empty() == true)
+        {
+          cout << "ERROR PASSWORD GEN CHARS" << endl;
+          exit(1);
+        }
 			}
 		}
 
@@ -592,7 +610,7 @@ void GenPasswordChars(unsigned short int numUsers, unsigned short int passwordLe
 		// OUTER LOOP FOR USERS
 		for (unsigned short int i = 0; i < numUsers; i++)
 		{
-			// PASSWORD BUFFER
+      // PASSWORD BUFFER
       string passwordBuffer;
 			
 			// INNER LOOP FOR PASSWORDS
@@ -621,7 +639,7 @@ void GenPasswordChars(unsigned short int numUsers, unsigned short int passwordLe
 } // END OF GEN PASSWORD CHARS FUNCTION
 
 // GENERATE PASSWORDS WITH WORDS
-void GenPasswordWords(unsigned short int numUsers, string* userList, string* passwordList, string* wordList, bool useWords, bool findWords)
+void GenPasswordWords(unsigned short int numUsers, string* passwordList, string* wordList, bool useWords, bool findWords)
 {
 	// IF STATEMENT GUARD
 	if ((useWords == true) and (findWords == false))
@@ -694,19 +712,30 @@ void WriteToFIle(unsigned short int numUsers, string* userList, string* password
 	if ((userList != nullptr) and (passwordList != nullptr) and (filename.empty() == false) and (defaultPath.empty() == false))
 	{
     // GET FILE PATH FROM DIRECTORY AND FILENAME
+    string homeDir = getenv("HOME");
+    if (defaultPath[0] == '~'){ defaultPath = homeDir + defaultPath.substr(1);}
     string filePath = defaultPath + "/" + filename;
 
     // WRITE CONTENT TO FILES
     if (partitionFile == false)
     {
-      if (not(filename == _DEFAULT_FILENAME))
+      cout << "Writing to file " << filePath << "..." << endl;
+
+      ofstream writefile(filePath);
+
+      writefile << "\tKEEP THIS FILE FROM UNAUTHORIZED USERS" << endl;
+      writefile << "\t\tGENERATED BY PASSGEN" << endl << endl;
+
+      for (unsigned short int i = 0; i < numUsers; i++)
       {
-        cout << "Writing to file " << filePath << "..." << endl;
+        if (userList[i].empty() == true)
+        {
+          continue;
+        }
+        writefile << "The password of user " << userList[i] << " is " << passwordList[i] << endl;
       }
-      else
-      {
-        cout << "Writing to file " << filePath << "..." << endl;
-      }
+
+      writefile.close();
     }
     else
     {
